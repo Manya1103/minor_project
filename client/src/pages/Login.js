@@ -2,6 +2,7 @@ import React, { useState, useContext } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { login } from "../services/api";
 import { AuthContext } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import FormInput from "../components/FormInput";
 
 const Login = () => {
@@ -10,6 +11,7 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { loginUser } = useContext(AuthContext);
+  const { isDark } = useTheme();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -36,32 +38,13 @@ const Login = () => {
     <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden font-display bg-neutral-light-gray dark:bg-background-dark">
       <div className="layout-container flex h-full grow flex-col">
         {/* Header */}
-        <header className="absolute top-0 left-0 right-0 z-10 p-6 lg:px-12">
+        <header className="absolute top-0 left-0 right-0 z-10 px-6 md:p-6 lg:px-12">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 text-neutral-dark-gray dark:text-white">
-              <div className="size-6 text-action-primary">
-                <svg
-                  fill="none"
-                  viewBox="0 0 48 48"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <g clipPath="url(#clip0_6_319)">
-                    <path
-                      d="M8.57829 8.57829C5.52816 11.6284 3.451 15.5145 2.60947 19.7452C1.76794 23.9758 2.19984 28.361 3.85056 32.3462C5.50128 36.3314 8.29667 39.7376 11.8832 42.134C15.4698 44.5305 19.6865 45.8096 24 45.8096C28.3135 45.8096 32.5302 44.5305 36.1168 42.134C39.7033 39.7375 42.4987 36.3314 44.1494 32.3462C45.8002 28.361 46.2321 23.9758 45.3905 19.7452C44.549 15.5145 42.4718 11.6284 39.4217 8.57829L24 24L8.57829 8.57829Z"
-                      fill="currentColor"
-                    />
-                  </g>
-                  <defs>
-                    <clipPath id="clip0_6_319">
-                      <rect fill="white" height="48" width="48" />
-                    </clipPath>
-                  </defs>
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold leading-tight tracking-[-0.015em]">
-                PocketPilot
-              </h2>
-            </div>
+            <img 
+              src={isDark ? "/PocketPilot-Logo-dark.png" : "/PocketPilot-Logo.png"}
+              alt="PocketPilot - Your Smart Financial Co-Pilot" 
+              className="h-40 w-auto"
+            />
             {/* <Link
               to="/register"
               className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -98,7 +81,7 @@ const Login = () => {
             <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8 lg:p-12 bg-neutral-white dark:bg-background-dark">
               <div className="w-full max-w-md space-y-6 sm:space-y-8">
                 <div>
-                  <h2 className="text-2xl sm:text-3xl font-bold text-neutral-dark-gray dark:text-white">
+                  <h2 className="text-2xl sm:text-3xl font-bold text-neutral-dark-gray dark:text-white mt-32 md:mt-0">
                     Log in to your account
                   </h2>
                    <Link

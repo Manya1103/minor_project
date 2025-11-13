@@ -1,7 +1,7 @@
 {
   "short_name": "PocketPilot",
-  "name": "PocketPilot - Smart Financial Copilot",
-  "description": "Your Smart Financial Copilot for managing expenses, tracking goals, and financial insights",
+  "name": "PocketPilot - Your Smart Financial Co-Pilot",
+  "description": "Your Smart Financial Co-Pilot for managing expenses, tracking goals, and financial insights",
   "icons": [
     {
       "src": "favicon.ico",
@@ -9,13 +9,13 @@
       "type": "image/x-icon"
     },
     {
-      "src": "icon-placeholder.svg",
-      "type": "image/svg+xml",
+      "src": "icon.png",
+      "type": "image/png",
       "sizes": "192x192",
       "purpose": "any maskable"
     },
     {
-      "src": "logo512.png",
+      "src": "icon.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any maskable"
@@ -30,14 +30,14 @@
   "categories": ["finance", "productivity", "business"],
   "screenshots": [
     {
-      "src": "icon-placeholder.svg",
-      "type": "image/svg+xml",
+      "src": "icon.png",
+      "type": "image/png",
       "sizes": "1280x720",
       "form_factor": "wide"
     },
     {
-      "src": "icon-placeholder.svg",
-      "type": "image/svg+xml",
+      "src": "icon.png",
+      "type": "image/png",
       "sizes": "750x1334",
       "form_factor": "narrow"
     }

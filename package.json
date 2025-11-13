@@ -1,7 +1,7 @@
 {
   "name": "pocketpilot",
   "version": "1.0.0",
-  "description": "Your Smart Financial Copilot - AI-Powered Expense Tracker",
+  "description": "Your Smart Financial Co-Pilot - AI-Powered Expense Tracker",
   "main": "server/server.js",
   "scripts": {
     "server": "nodemon server/server.js",

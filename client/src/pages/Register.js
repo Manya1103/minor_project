@@ -2,6 +2,7 @@ import React, { useState, useContext } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { register } from "../services/api";
 import { AuthContext } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import FormInput from "../components/FormInput"; // Import the new component
 
 const Register = () => {
@@ -14,6 +15,7 @@ const Register = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { loginUser } = useContext(AuthContext);
+  const { isDark } = useTheme();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -51,29 +53,12 @@ const Register = () => {
 
   return (
     <div className="relative flex min-h-screen w-full flex-col items-center justify-center p-4 sm:p-6 lg:p-8 font-display bg-background-light dark:bg-background-dark">
-      <header className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 sm:p-6 lg:px-10 lg:py-8">
-        <div className="flex items-center gap-3 text-slate-800 dark:text-white">
-          <div className="h-5 w-5 sm:h-6 sm:w-6 text-primary">
-            {/* SVG Logo */}
-            <svg
-              fill="currentColor"
-              viewBox="0 0 48 48"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <g clipPath="url(#clip0_6_319)">
-                <path d="M8.57829 8.57829C5.52816 11.6284 3.451 15.5145 2.60947 19.7452C1.76794 23.9758 2.19984 28.361 3.85056 32.3462C5.50128 36.3314 8.29667 39.7376 11.8832 42.134C15.4698 44.5305 19.6865 45.8096 24 45.8096C28.3135 45.8096 32.5302 44.5305 36.1168 42.134C39.7033 39.7375 42.4987 36.3314 44.1494 32.3462C45.8002 28.361 46.2321 23.9758 45.3905 19.7452C44.549 15.5145 42.4718 11.6284 39.4217 8.57829L24 24L8.57829 8.57829Z" />
-              </g>
-              <defs>
-                <clipPath id="clip0_6_319">
-                  <rect fill="white" height="48" width="48" />
-                </clipPath>
-              </defs>
-            </svg>
-          </div>
-          <h2 className="text-lg sm:text-xl font-bold leading-tight tracking-[-0.015em]">
-            PocketPilot
-          </h2>
-        </div>
+      <header className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 lg:px-10 lg:py-8">
+        <img 
+          src={isDark ? "/PocketPilot-Logo-dark.png" : "/PocketPilot-Logo.png"}
+          alt="PocketPilot - Your Smart Financial Co-Pilot" 
+          className="h-40 w-auto"
+        />
         <div className="hidden items-center gap-9 sm:flex">
           <Link
             to="/login"
@@ -87,8 +72,8 @@ const Register = () => {
 
       <main className="flex w-full max-w-6xl flex-1 items-center justify-center py-20 sm:py-24">
         <div className="grid w-full grid-cols-1 gap-8 sm:gap-12 lg:grid-cols-2 lg:gap-16">
-          <div className="flex w-full flex-col justify-center space-y-6 sm:space-y-8 rounded-lg bg-white p-6 shadow-md dark:bg-gray-800 sm:p-8 lg:w-auto lg:bg-transparent lg:p-0 lg:shadow-none dark:lg:bg-transparent">
-            <div>
+          <div className="flex w-full flex-col justify-center space-y-6 sm:space-y-8 rounded-lg bg-white p-6 mt-10 shadow-md dark:bg-gray-800 sm:p-8 lg:w-auto lg:bg-transparent lg:p-0 lg:shadow-none dark:lg:bg-transparent">
+            <div >
               <div className="flex flex-col gap-2">
                 <p className="text-2xl sm:text-3xl lg:text-4xl font-black leading-tight tracking-[-0.033em] text-slate-900 dark:text-white">
                   Start Your Financial Journey
@@ -98,8 +83,6 @@ const Register = () => {
                 </p>
               </div>
             </div>
-
-            {/* "Step 1 of 3" and progress bar are REMOVED */}
 
             {error && (
               <div className="rounded-lg bg-red-50 p-3 sm:p-4 text-xs sm:text-sm text-red-500 dark:bg-red-900/10 dark:text-red-400">
@@ -199,11 +182,10 @@ const Register = () => {
             <div className="relative flex h-full w-full items-center justify-center rounded-2xl bg-slate-100 p-8 dark:bg-slate-900/50">
               <img
                 className="h-full w-full rounded-xl object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBjXAvvQo05-7LF9sTiJKJU1amGmUwpm4HC7QQFxzrC9y2-OI5R9VmwBXvBz1YSe7XP6xhza48m4ODK5zC8RU-WZHV06ZWRONBAjWgYBNhacQ2jPGfBurpyYfFNgUUqMKiASRsqgvMm6zc1YX2P53r8s_PLkzbMbfrE5K0H_sKfk00CVhz1a-t4aoXkuD1FCNgXLq-AicWRgWXiBm20mknzSzawNF8iecdk3DEoi3U2oMjJw-ZxZCqvRhgsLOsUib8avcWot11o0FUL"
-                alt="An abstract 3D illustration with soft, flowing shapes in pastel colors, representing growth and clarity"
+                src={isDark ? "/PocketPilot-Logo-1.png" : "/PocketPilot-Logo.png"}
               />
               <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-background-dark/50 to-transparent"></div>
-              <div className="absolute bottom-8 left-8 right-8 rounded-lg border border-white/10 bg-black/20 p-6 text-white backdrop-blur-lg">
+              <div className="absolute bottom-5 left-8 right-8 rounded-lg border border-white/10 bg-black/20 p-6 text-white backdrop-blur-lg">
                 <h3 className="mb-2 text-lg sm:text-xl font-bold">
                   Chart Your Course to Financial Freedom
                 </h3>

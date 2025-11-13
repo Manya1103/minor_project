@@ -1,4 +1,4 @@
-# 📱 PWA Setup & Testing Guide
+# 🧪 Testing PWA on Localhost - Quick Guide
 
 ## Prerequisites
 
@@ -86,7 +86,7 @@ http://localhost:3000
 1. In DevTools, go to **Application** tab
 2. Click **Manifest** in the left sidebar
 3. Verify:
-   - ✅ Name: "PocketPilot - Smart Financial Copilot"
+   - ✅ Name: "PocketPilot - Your Smart Financial Co-Pilot"
    - ✅ Theme color: #2563eb
    - ✅ Icons listed (even if placeholder)
    - ✅ Start URL defined

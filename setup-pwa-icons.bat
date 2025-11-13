@@ -10,8 +10,8 @@ echo.
 echo To complete PWA setup, you need the following icons in client\public\:
 echo.
 echo 1. favicon.ico (16x16, 32x32, 64x64)
-echo 2. logo192.png (192x192 pixels)
-echo 3. logo512.png (512x512 pixels)
+echo 2. icon.png (192x192 pixels)
+echo 3. icon.png (512x512 pixels)
 echo.
 echo ================================================
 echo Option 1: Use Online Tools
@@ -37,10 +37,10 @@ if exist "client\public\" (
         echo   ^<rect width="512" height="512" fill="#2563eb"/^>
         echo   ^<text x="256" y="280" font-family="Arial, sans-serif" font-size="200" fill="white" text-anchor="middle"^>PP^</text^>
         echo ^</svg^>
-    ) > client\public\icon-placeholder.svg
+    ) > client\public\icon.png
     
     echo.
-    echo ✓ Created icon-placeholder.svg in client\public\
+    echo ✓ Created icon.png in client\public\
     echo.
     echo You can use this SVG as a starting point and convert it to PNG using:
     echo   - Online: https://cloudconvert.com/svg-to-png

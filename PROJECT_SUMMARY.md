@@ -423,6 +423,6 @@ PocketPilot is a **complete, production-ready, AI-powered financial management s
 
 **Built with ❤️ and cutting-edge technology**
 
-**PocketPilot - Your Smart Financial Copilot** 💰✨
+**PocketPilot - Your Smart Financial Co-Pilot** 💰✨
 
 Ready to take control of your finances with AI! 🚀

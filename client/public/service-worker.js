@@ -11,8 +11,8 @@ const PRECACHE_ASSETS = [
   '/static/js/bundle.js',
   '/static/css/main.css',
   '/manifest.json',
-  '/logo192.png',
-  '/logo512.png'
+  '/icon.png',
+  '/icon.png'
 ];
 
 // API endpoints to cache dynamically
@@ -166,8 +166,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'PocketPilot';
   const options = {
     body: data.body || 'You have a new notification',
-    icon: '/logo192.png',
-    badge: '/logo192.png',
+    icon: '/icon.png',
+    badge: '/icon.png',
     vibrate: [200, 100, 200],
     data: data.data || {},
     actions: data.actions || []

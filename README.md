@@ -1,4 +1,4 @@
-# 💰 PocketPilot - Your Smart Financial Copilot
+# 💰 PocketPilot - Your Smart Financial Co-Pilot
 
 > An intelligent, AI-powered MERN stack expense tracker that transforms how you manage your finances.
 
@@ -14,7 +14,7 @@
 
 ## 🎯 What is PocketPilot?
 
-PocketPilot is not just another expense tracker - it's your intelligent financial copilot that:
+PocketPilot is not just another expense tracker - it's your intelligent financial Co-Pilot that:
 
 ✨ **Automatically extracts** expense data from receipt photos using OCR  
 🤖 **Intelligently categorizes** expenses using AI/ML  
@@ -342,7 +342,7 @@ If you find this project helpful:
 
 <div align="center">
 
-**PocketPilot** - Your Smart Financial Copilot 💰✨
+**PocketPilot** - Your Smart Financial Co-Pilot 💰✨
 
 Made with ❤️ using React, Node.js, MongoDB, and AI
 
