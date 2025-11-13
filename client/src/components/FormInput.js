@@ -10,6 +10,7 @@ const FormInput = ({
   onChange,
   placeholder,
   required = false,
+  autoComplete,
 }) => {
   const [inputType, setInputType] = useState(type);
 
@@ -18,6 +19,15 @@ const FormInput = ({
   };
 
   const isPassword = type === "password";
+  
+  // Auto-determine autocomplete if not provided
+  const getAutoComplete = () => {
+    if (autoComplete) return autoComplete;
+    if (type === "password") return "current-password";
+    if (type === "email" || name === "email") return "email";
+    if (name === "username") return "username";
+    return "off";
+  };
 
   return (
     <label className="flex flex-col">
@@ -30,6 +40,7 @@ const FormInput = ({
           name={name}
           value={value}
           onChange={onChange}
+          autoComplete={getAutoComplete()}
           className={`form-input h-12 w-full flex-1 resize-none overflow-hidden border bg-transparent px-4 py-2.5 text-base font-normal leading-normal text-slate-900 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-primary ${
             isPassword ? "rounded-l-lg border-r-0" : "rounded-lg border-slate-300"
           }`}

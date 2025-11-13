@@ -14,6 +14,9 @@ import Expenses from "./pages/Expenses";
 import Goals from "./pages/Goals";
 import Analytics from "./pages/Analytics";
 import Layout from "./components/Layout";
+import PWAInstallPrompt from "./components/PWAInstallPrompt";
+import OfflineIndicator from "./components/OfflineIndicator";
+import UpdatePrompt from "./components/UpdatePrompt";
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
@@ -38,7 +41,10 @@ function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <Router>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <OfflineIndicator />
+          <UpdatePrompt />
+          <PWAInstallPrompt />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
