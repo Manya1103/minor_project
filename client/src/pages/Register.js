@@ -57,7 +57,7 @@ const Register = () => {
         <img 
           src={isDark ? "/logo-dark.png" : "/logo-bright.png"}
           alt="PocketPilot - Your Smart Financial Co-Pilot" 
-          className="h-5 w-auto"
+          className="h-12 w-auto"
         />
         <div className="hidden items-center gap-9 sm:flex">
           <Link
@@ -181,8 +181,8 @@ const Register = () => {
           <div className="hidden items-center justify-center lg:flex">
             <div className="relative flex h-full w-full items-center justify-center rounded-2xl bg-slate-100 p-8 dark:bg-slate-900/50">
               <img
-                className="h-full w-full rounded-xl object-cover"
-                src={isDark ? "/PocketPilot-Logo-1.png" : "/PocketPilot-Logo.png"}
+                className="h-15 w-auto rounded-xl object-cover"
+                src={isDark ? "/logo-dark.png" : "/logo-bright.png"}
               />
               <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-background-dark/50 to-transparent"></div>
               <div className="absolute bottom-5 left-8 right-8 rounded-lg border border-white/10 bg-black/20 p-6 text-white backdrop-blur-lg">
