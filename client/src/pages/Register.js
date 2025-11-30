@@ -57,7 +57,7 @@ const Register = () => {
         <img 
           src={isDark ? "/logo-dark.png" : "/logo-bright.png"}
           alt="PocketPilot - Your Smart Financial Co-Pilot" 
-          className="h-10 w-auto"
+          className="h-5 w-auto"
         />
         <div className="hidden items-center gap-9 sm:flex">
           <Link
