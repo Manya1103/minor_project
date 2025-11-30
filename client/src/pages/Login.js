@@ -41,9 +41,9 @@ const Login = () => {
         <header className="absolute top-0 left-0 right-0 z-10 px-6 md:p-6 lg:px-12">
           <div className="flex items-center justify-between">
             <img 
-              src={isDark ? "/PocketPilot-Logo-dark.png" : "/PocketPilot-Logo.png"}
+              src={isDark ? "/logo-dark.png" : "/logo-bright.png"}
               alt="PocketPilot - Your Smart Financial Co-Pilot" 
-              className="h-40 w-auto"
+              className="h-10 w-auto"
             />
             {/* <Link
               to="/register"

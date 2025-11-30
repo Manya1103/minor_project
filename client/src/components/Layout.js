@@ -47,13 +47,13 @@ const Layout = () => {
       <aside className={`fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-[#111318] p-4 transition-transform duration-300 lg:translate-x-0 lg:z-20 ${
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
           {/* Logo & Brand */}
-          <div className="flex items-center justify-center py-2">
+          <div className="flex items-center justify-center">
             <img 
-              src={isDark ? "/PocketPilot-Logo-dark.png" : "/PocketPilot-Logo.png"}
+              src={isDark ? "/logo-dark.png" : "/logo-bright.png"}
               alt="PocketPilot - Your Smart Financial Co-Pilot" 
-              className="h-8 w-auto"
+              className="py-2 h-12 w-auto"
             />
           </div>
 

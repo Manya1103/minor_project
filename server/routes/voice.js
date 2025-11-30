@@ -1,14 +1,16 @@
-/* ===========================
-   routes/voice.js  — PART 1/2
-   =========================== */
+/**
+ * routes/voice.js
+ * Full single-file voice route with improved parsing using natural, chrono-node, fuse.js
+ *
+ * Requires: npm install natural chrono-node fuse.js
+ */
 
 const express = require("express");
 const router = express.Router();
 const auth = require("../middleware/auth");
 const Expense = require("../models/Expense");
-const categorizationService = require("../services/categorization");
 
-// Optional: User model for income/budget (savings). If absent, we degrade gracefully.
+// Optional User model for income/budget (savings). If absent, we degrade gracefully.
 let User;
 try {
   User = require("../models/User");
@@ -16,434 +18,217 @@ try {
   /* optional */
 }
 
-/* =========================================================================
-   POST /api/voice/command  —  Main entrypoint (bilingual + natural Hindi)
-   ========================================================================= */
-router.post("/command", auth, async (req, res) => {
-  try {
-    const { transcript } = req.body;
-    if (!transcript || !String(transcript).trim()) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No transcript provided" });
+// categorizationService is expected to exist
+const categorizationService = require("../services/categorization");
+
+// NLP + fuzzy libs
+const natural = require("natural");
+const chrono = require("chrono-node");
+const Fuse = require("fuse.js");
+
+////////////////////////////////////////////////////////////////////////
+// Basic tokenizer + categories (tune with your app's real categories)
+const tokenizer = new natural.WordTokenizer();
+const CANONICAL_CATEGORIES = categorizationService?.getAllCategories
+  ? categorizationService.getAllCategories()
+  : [
+      "food",
+      "groceries",
+      "travel",
+      "transport",
+      "shopping",
+      "entertainment",
+      "bills",
+      "rent",
+      "utilities",
+      "health",
+      "education",
+      "fuel",
+      "gifts",
+      "other",
+    ];
+const fuseCategories = new Fuse(
+  CANONICAL_CATEGORIES.map((c) => ({ cat: c })),
+  { keys: ["cat"], threshold: 0.45 }
+);
+
+////////////////////////////////////////////////////////////////////////
+// Small numbers map (English + simple Hindi words)
+const SMALL_NUMBER_WORDS = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90,
+  hundred: 100,
+  thousand: 1000,
+  lakh: 100000,
+  crore: 10000000,
+  // Hindi basics
+  ek: 1,
+  do: 2,
+  teen: 3,
+  chaar: 4,
+  paanch: 5,
+  chhah: 6,
+  saat: 7,
+  aath: 8,
+  nau: 9,
+  das: 10,
+  bees: 20,
+  sau: 100,
+  hazaar: 1000,
+  laakh: 100000,
+};
+
+function wordsToNumber(words) {
+  if (!words) return null;
+  const cleaned = String(words)
+    .toLowerCase()
+    .replace(/[,\\-]/g, " ")
+    .replace(/₹/g, " rupees ")
+    .replace(/\b(rs\.?|rupees?|rupay|rupaye)\b/g, " ")
+    .trim();
+
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return null;
+
+  let total = 0;
+  let current = 0;
+  for (const t of tokens) {
+    if (/^\d+(?:\.\d+)?$/.test(t)) {
+      current += Number(t);
+      continue;
     }
-
-    const t = String(transcript).trim();
-    const lang = detectLanguage(t); // 'hi' | 'en'
-    const parsed = parseVoiceCommand(t);
-
-    // NOTE: The handler functions referenced below are defined in PART 2.
-    switch (parsed.action) {
-      case "add_expense": {
-        const expense = await addExpenseFromVoice(req.user._id, parsed.data);
-        const msg =
-          lang === "hi"
-            ? `₹${fmt(expense.amount)} ${expense.category
-            } ke liye jod diya gaya.`
-            : `Added ₹${fmt(expense.amount)} for ${expense.category}.`;
-        return res.json({
-          success: true,
-          action: "add_expense",
-          expense,
-          response: msg,
-          lang,
-        });
+    if (SMALL_NUMBER_WORDS[t] !== undefined) {
+      const val = SMALL_NUMBER_WORDS[t];
+      if (val >= 100) {
+        current = current === 0 ? val : current * val;
+      } else {
+        current += val;
       }
-
-      case "query_spending": {
-        const spendingData = await querySpending(req.user._id, parsed.data);
-        const msg = generateSpendingResponse(spendingData, lang);
-        return res.json({
-          success: true,
-          action: "query_spending",
-          data: spendingData,
-          response: msg,
-          lang,
-        });
-      }
-
-      case "get_summary": {
-        const summary = await getSummary(
-          req.user._id,
-          parsed.data?.period || "month",
-          parsed.data?.which || "this"
-        );
-        const msg = generateSummaryResponse(summary, lang);
-        return res.json({
-          success: true,
-          action: "get_summary",
-          data: summary,
-          response: msg,
-          lang,
-        });
-      }
-
-      case "biggest_expense": {
-        const bex = await getBiggestExpense(
-          req.user._id,
-          parsed.data.period,
-          parsed.data.which
-        );
-        const msg = bex
-          ? lang === "hi"
-            ? `${timePhraseHi(
-              parsed.data.period,
-              parsed.data.which
-            )} aapka sabse bada kharcha ₹${fmt(bex.amount)} ${bex.category
-            } par hua${bex.description ? ` (${bex.description})` : ""}.`
-            : `Your biggest expense ${timePhraseEn(
-              parsed.data.period,
-              parsed.data.which
-            )} is ₹${fmt(bex.amount)} on ${bex.category}${bex.description ? ` (${bex.description})` : ""
-            }.`
-          : lang === "hi"
-            ? `${timePhraseHi(
-              parsed.data.period,
-              parsed.data.which
-            )} koi kharcha nahi mila.`
-            : `No expenses found ${timePhraseEn(
-              parsed.data.period,
-              parsed.data.which
-            )}.`;
-        return res.json({
-          success: true,
-          action: "biggest_expense",
-          data: bex,
-          response: msg,
-          lang,
-        });
-      }
-
-      case "top_categories": {
-        const tc = await getTopCategories(
-          req.user._id,
-          parsed.data.period,
-          parsed.data.which,
-          parsed.data.limit || 3
-        );
-        const msg = tc.length
-          ? lang === "hi"
-            ? `${timePhraseHi(parsed.data.period, parsed.data.which)} top ${tc.length
-            } categories: ` +
-            tc
-              .map(([cat, amt], i) => `${i + 1}. ${cat} ₹${fmt(amt)}`)
-              .join(", ") +
-            "."
-            : `Top ${tc.length} categories ${timePhraseEn(
-              parsed.data.period,
-              parsed.data.which
-            )}: ` +
-            tc
-              .map(([cat, amt], i) => `${i + 1}. ${cat} ₹${fmt(amt)}`)
-              .join(", ") +
-            "."
-          : lang === "hi"
-            ? `${timePhraseHi(
-              parsed.data.period,
-              parsed.data.which
-            )} koi spending nahi mili.`
-            : `No spending found ${timePhraseEn(
-              parsed.data.period,
-              parsed.data.which
-            )}.`;
-        return res.json({
-          success: true,
-          action: "top_categories",
-          data: tc,
-          response: msg,
-          lang,
-        });
-      }
-
-      case "savings": {
-        const sv = await getSavings(
-          req.user._id,
-          parsed.data.period,
-          parsed.data.which
-        );
-        const msg = sv
-          ? generateSavingsResponse(sv, lang)
-          : lang === "hi"
-            ? `Aapki income/budget settings nahi mili. Kripya monthly income set karein.`
-            : `I couldn't find your income/budget settings. Please set your monthly income.`;
-        return res.json({
-          success: true,
-          action: "savings",
-          data: sv,
-          response: msg,
-          lang,
-        });
-      }
-
-      case "last_expenses": {
-        const list = await getRecentExpenses(
-          req.user._id,
-          parsed.data.limit || 5
-        );
-        const msg = list.length
-          ? lang === "hi"
-            ? `Aakhri ${list.length} kharche: ` +
-            list
-              .map(
-                (e) =>
-                  `₹${fmt(e.amount)} ${e.category} (${shortDate(e.date)})`
-              )
-              .join(", ") +
-            "."
-            : `Last ${list.length} expenses: ` +
-            list
-              .map(
-                (e) =>
-                  `₹${fmt(e.amount)} ${e.category} (${shortDate(e.date)})`
-              )
-              .join(", ") +
-            "."
-          : lang === "hi"
-            ? `Koi recent expense nahi mila.`
-            : `No recent expenses found.`;
-        return res.json({
-          success: true,
-          action: "last_expenses",
-          data: list,
-          response: msg,
-          lang,
-        });
-      }
-
-      case "compare_periods": {
-        const cmp = await comparePeriods(
-          req.user._id,
-          parsed.data.base,
-          parsed.data.vs
-        );
-        const msg = generateCompareResponse(cmp, lang);
-        return res.json({
-          success: true,
-          action: "compare_periods",
-          data: cmp,
-          response: msg,
-          lang,
-        });
-      }
-
-      case "avg_spending": {
-        const avg = await getAverageSpending(
-          req.user._id,
-          parsed.data.period || "month"
-        );
-        const msg =
-          lang === "hi"
-            ? `${periodHi(parsed.data.period)} ka aapka ausat kharcha ₹${fmt(
-              avg.average
-            )} hai.`
-            : `Your average ${parsed.data.period} spending is ₹${fmt(
-              avg.average
-            )}.`;
-        return res.json({
-          success: true,
-          action: "avg_spending",
-          data: avg,
-          response: msg,
-          lang,
-        });
-      }
-
-      default: {
-        const msg =
-          lang === "hi"
-            ? `Mujhe sahi samajh nahi aaya. Aise bolein:
-- "200 rupay khane mein add karo"
-- "Aaj maine kitna kharch kiya?"
-- "Kal ka kharcha kitna tha?"
-- "Is mahine ka sabse bada kharcha kya hai?"
-- "Is hafte top 3 categories batao"
-- "Is mahine kitni savings hui?"
-- "Pichhle 5 expenses dikhao"`
-            : `I didn't catch that. Try:
-- "Add 200 rupees for food"
-- "How much did I spend today?"
-- "How much yesterday?"
-- "What's my biggest expense this month?"
-- "Top 3 categories this week"
-- "How much did I save this month?"
-- "Show my last 5 expenses"`;
-        return res.json({ success: false, message: msg, lang });
-      }
+      continue;
     }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: error.message });
+    // unknown token => stop parsing
+    return null;
   }
-});
 
-/* =========================================================================
-   LANGUAGE DETECTION — robust for Hinglish + Devanagari
-   ========================================================================= */
+  total += current;
+  return total || null;
+}
+
+function parseAmountFromText(text) {
+  if (!text) return null;
+  const digitMatch = text.match(
+    /(?:₹|rs\.?|rupees?)?\s*([0-9]{1,3}(?:[,0-9]{0,})?(?:\.[0-9]+)?)/i
+  );
+  if (digitMatch) {
+    const raw = digitMatch[1].replace(/,/g, "");
+    const n = Number(raw);
+    if (!Number.isNaN(n)) return n;
+  }
+
+  // try words -> number
+  const tokens = tokenizer.tokenize(text);
+  for (let len = Math.min(8, tokens.length); len >= 1; len--) {
+    const cand = tokens.slice(-len).join(" ");
+    const n = wordsToNumber(cand);
+    if (n !== null) return n;
+  }
+  return null;
+}
+
+function fuzzyCategory(userCategory) {
+  if (!userCategory) return { category: null, score: 1 };
+  const res = fuseCategories.search(userCategory);
+  if (res && res.length)
+    return { category: res[0].item.cat, score: res[0].score };
+  return { category: userCategory, score: 1 };
+}
+
+////////////////////////////////////////////////////////////////////////
+// Language detection (Devanagari + Hinglish cues)
 function detectLanguage(text) {
-  const dev = /[\u0900-\u097F]/.test(text); // Devanagari
-  // Common Hinglish/Hindi cues (case-insensitive)
-  const hiHints =
-    /(aaj|kal|kitna|kharch|kharcha|maine|rupay|rupaye|bacha|saving|mahina|mahine|hafta|saal|pichhle|is|sabse|bada|jodo|karo|mein|me|par|pe)/i.test(
-      text
-    );
-  return dev || hiHints ? "hi" : "en";
-}
+  if (!text || !String(text).trim()) return "en";
+  const t = String(text);
+  if (/[\u0900-\u097F]/.test(t)) return "hi"; // Devanagari => Hindi
 
-/* =========================================================================
-   INTENT PARSING — Natural Hindi + English (no default “utilities”)
-   ========================================================================= */
-function parseVoiceCommand(transcript) {
-  const lower = transcript.toLowerCase().trim();
-
-  /* ✅ 1. Add Expense (Hindi + English + Hinglish) */
-  const addPatterns = [
-    /add\s+(?:rs\.?|rupees?)?\s*(\d+)\s+(?:for|to|in|on)\s+(.+)/i,
-    /spent\s+(?:rs\.?|rupees?)?\s*(\d+)\s+(?:on|for)\s+(.+)/i,
-    /(\d+)\s*(?:rs|rupees?|rupay|rupaye)?\s*(?:add\s*karo|kharch\s*kar\s*do|jod(?:o|do))\s*(?:for|on|ke\s*liye|mein|me|par|pe)?\s+(.+)/i,
-    /(.+)\s+(?:ke\s*liye|mein|me|par|pe)\s*(\d+)\s*(?:rs|rupees?|rupay|rupaye)?\s*(?:add\s*karo|jodo|kharch\s*kar\s*do)?/i,
+  const hiWords = [
+    "aaj",
+    "kal",
+    "kitna",
+    "kharch",
+    "kharcha",
+    "maine",
+    "rupay",
+    "rupaye",
+    "bacha",
+    "bachat",
+    "mahina",
+    "mahine",
+    "hafta",
+    "pichhle",
+    "sabse",
+    "bada",
+    "jodo",
+    "karo",
+    "kya",
+    "par",
+    "pe",
+    "ke",
+    "liye",
   ];
-  for (const p of addPatterns) {
-    const m = lower.match(p);
-    if (m) {
-      const amount = isNaN(m[1]) ? parseInt(m[2]) : parseInt(m[1]);
-      const description = (isNaN(m[1]) ? m[1] : m[2]).trim();
-      return { action: "add_expense", data: { amount, description } };
-    }
-  }
-
-  /* ✅ 2. Aaj / Kal + Category Based */
-  const dailyCategoryMatch = lower.match(
-    /(aaj|kal)\s+(.+?)\s+(par|pe|per)\s+kitna\s+(kharch|kharcha|spend)\s+(hua|kiya)/i
-  );
-  if (dailyCategoryMatch) {
-    return {
-      action: "query_spending",
-      data: {
-        category: dailyCategoryMatch[2].trim(),
-        period: dailyCategoryMatch[1] === "kal" ? "yesterday" : "today",
-        which: "this",
-      },
-    };
-  }
-
-  /* ✅ 3. Aaj Kul Kharcha (No Category) */
-  if (/aaj\s+(maine\s+)?kitna\s+(kharch|kharcha|spend)\s+kiya/.test(lower)) {
-    return {
-      action: "query_spending",
-      data: { category: "all", period: "today", which: "this" },
-    };
-  }
-  if (/kal\s+(maine\s+)?kitna\s+(kharch|spend)\s+(hua|kiya)/.test(lower)) {
-    return {
-      action: "query_spending",
-      data: { category: "all", period: "yesterday", which: "this" },
-    };
-  }
-
-  /* ✅ 4. Is Mahine / Hafte / Saal Ka Total Kharcha */
-  if (
-    /is\s+mahine\s+(mera\s+)?total\s+(kharcha|expense|spending)\s+kitna/.test(
-      lower
-    )
-  ) {
-    return { action: "get_summary", data: { period: "month", which: "this" } };
-  }
-  if (/is\s+hafte\s+kitna\s+(kharch|spend)/.test(lower)) {
-    return {
-      action: "query_spending",
-      data: { category: "all", period: "week", which: "this" },
-    };
-  }
-  if (/is\s+saal\s+kitna\s+(kharch|spend)/.test(lower)) {
-    return {
-      action: "query_spending",
-      data: { category: "all", period: "year", which: "this" },
-    };
-  }
-
-  /* ✅ 5. Category + Month/Week/Year */
-  const catTime = lower.match(
-    /(.+?)\s+(par|pe)\s+kitna\s+(kharcha|spend)\s+(?:hua|kiya)\s+(?:is|last|pichhle)?\s*(mahine|week|hafte|saal)?/i
-  );
-  if (catTime) {
-    return {
-      action: "query_spending",
-      data: {
-        category: catTime[1].trim(),
-        period:
-          catTime[4] === "haftे" || catTime[4] === "week"
-            ? "week"
-            : catTime[4] === "saal"
-              ? "year"
-              : "month",
-        which: /pichhle|last/.test(lower) ? "last" : "this",
-      },
-    };
-  }
-
-  /* ✅ 6. Biggest Expense */
-  if (/sabse\s+bada\s+kharcha|biggest\s+expense/i.test(lower)) {
-    return {
-      action: "biggest_expense",
-      data: { period: "month", which: "this" },
-    };
-  }
-
-  /* ✅ 7. Savings */
-  if (/kitni\s+(saving|bachat)|maine\s+kitna\s+bacha/i.test(lower)) {
-    return { action: "savings", data: { period: "month", which: "this" } };
-  }
-
-  /* ✅ 8. Last X Expenses (like "pichhle 5 expenses", "last 3 expenses") */
-  const lastExpMatch = lower.match(/(?:pichhle|:last)\s+(\d+)\s+expenses?/i);
-  if (lastExpMatch) {
-    return {
-      action: "last_expenses",
-      data: { limit: parseInt(lastExpMatch[1], 10) },
-    };
-  }
-
-  /* ✅ 9. English "How much did I spend on food this week?" */
-  const engQuery = lower.match(
-    /how\s+much\s+did\s+i\s+spend\s+(?:on\s+)?(.+?)\s+(this|last)\s+(week|month|year)/i
-  );
-  if (engQuery) {
-    return {
-      action: "query_spending",
-      data: {
-        category: engQuery[1].trim(),
-        period: engQuery[3],
-        which: engQuery[2] === "last" ? "last" : "this",
-      },
-    };
-  }
-
-  /* ✅ 10. If nothing matched → Unknown */
-  return { action: "unknown", data: {} };
+  const lower = t.toLowerCase();
+  let count = 0;
+  for (const w of hiWords)
+    if (new RegExp("\\b" + w + "\\b", "i").test(lower)) count++;
+  return count >= 2 ? "hi" : "en";
 }
 
-/* =========================================================================
-   NORMALIZATION HELPERS
-   ========================================================================= */
+////////////////////////////////////////////////////////////////////////
+// Normalizers for period/which
 function normPeriod(p) {
   if (!p) return "month";
-  p = p.toLowerCase();
-  if (/(today|aaj)/.test(p)) return "today";
-  if (/(yesterday|kal)/.test(p)) return "yesterday";
-  if (/(week|hafta)/.test(p)) return "week";
-  if (/(year|saal)/.test(p)) return "year";
-  return "month"; // month | mahina | mahine
+  const s = String(p).toLowerCase();
+  if (/(today|aaj)/.test(s)) return "today";
+  if (/(yesterday|kal)/.test(s)) return "yesterday";
+  if (/(week|hafta|hafte)/.test(s)) return "week";
+  if (/(year|saal)/.test(s)) return "year";
+  if (/(month|mahina|mahine)/.test(s)) return "month";
+  return "month";
 }
 function normWhich(w) {
   if (!w) return "this";
-  w = w.toLowerCase();
-  if (/(last|pichhle)/.test(w)) return "last";
-  return "this"; // this | is
+  const s = String(w).toLowerCase();
+  if (/(last|pichhle|pichla|pichle)/.test(s)) return "last";
+  return "this";
 }
 
-/* =========================================================================
-   DATE & PHRASE HELPERS
-   ========================================================================= */
+////////////////////////////////////////////////////////////////////////
+// Date range helper (keeps your original logic)
 function getPeriodRange(period = "month", which = "this") {
   const now = new Date();
   let start, end;
@@ -491,6 +276,8 @@ function getPeriodRange(period = "month", which = "this") {
   return { start, end };
 }
 
+////////////////////////////////////////////////////////////////////////
+// Time phrase helpers (bilingual helpers)
 function timePhraseEn(period, which) {
   if (period === "today") return which === "last" ? "yesterday" : "today";
   if (period === "yesterday") return "yesterday";
@@ -508,12 +295,11 @@ function periodHi(period) {
   return period === "day"
     ? "din"
     : period === "week"
-      ? "hafte"
-      : period === "year"
-        ? "saal"
-        : "mahine";
+    ? "hafte"
+    : period === "year"
+    ? "saal"
+    : "mahine";
 }
-
 function shortDate(d) {
   const dd = new Date(d);
   return dd.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
@@ -525,27 +311,555 @@ function fmt(n) {
     return n;
   }
 }
+function cap(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
 
-/* ===========================
-   END OF PART 1/2
-   (Next: DB ops + responses)
-   =========================== */
+////////////////////////////////////////////////////////////////////////
+// chrono -> period/which helper
+function chronoToPeriodWhich(text) {
+  const results = chrono.parse(text, new Date(), { forwardDate: true });
+  if (!results || !results.length) {
+    if (/\b(today|aaj)\b/i.test(text))
+      return { period: "today", which: "this" };
+    if (/\b(yesterday|kal)\b/i.test(text))
+      return { period: "yesterday", which: "this" };
+    if (/\b(last|pichhle|pichla).*\b(week|hafta|hafte)\b/i.test(text))
+      return { period: "week", which: "last" };
+    if (/\b(this|is).*\b(week|hafta|hafte)\b/i.test(text))
+      return { period: "week", which: "this" };
+    if (/\b(last|pichhle).*\b(month|mahine|mahina)\b/i.test(text))
+      return { period: "month", which: "last" };
+    if (/\b(this|is).*\b(month|mahine|mahina)\b/i.test(text))
+      return { period: "month", which: "this" };
+    if (/\b(last|pichhle).*\b(year|saal)\b/i.test(text))
+      return { period: "year", which: "last" };
+    if (/\b(this|is).*\b(year|saal)\b/i.test(text))
+      return { period: "year", which: "this" };
+    return null;
+  }
 
-module.exports = router; // <- temporary export to avoid linter errors in this part
-// NOTE: In PART 2 we will REPLACE this export with the actual final export.
+  const r = results[0];
+  if (r.start && r.end) {
+    const s = r.start.date();
+    const e = r.end.date();
+    const diffDays = Math.round((e - s) / (1000 * 3600 * 24)) + 1;
+    if (diffDays === 1) {
+      const now = new Date();
+      const which =
+        s.toDateString() ===
+        new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate()
+        ).toDateString()
+          ? "this"
+          : "last";
+      return { period: "today", which };
+    }
+    if (diffDays >= 6 && diffDays <= 8)
+      return { period: "week", which: "this" };
+    if (diffDays >= 27 && diffDays <= 31)
+      return { period: "month", which: "this" };
+    return { period: "month", which: "this" };
+  }
 
-/* ===========================
-   routes/voice.js  — PART 2/2
-   (DB ops + response builders + final export)
-   =========================== */
+  if (r.start) {
+    const dt = r.start.date();
+    const now = new Date();
+    const daysAgo = Math.round((now - dt) / (1000 * 3600 * 24));
+    if (daysAgo === 0) return { period: "today", which: "this" };
+    if (daysAgo === 1) return { period: "yesterday", which: "this" };
+    if (daysAgo <= 7) return { period: "week", which: "this" };
+    if (daysAgo <= 31) return { period: "month", which: "this" };
+    return { period: "month", which: "this" };
+  }
+  return null;
+}
 
-/* ========================================================================
-   CORE DB OPS
-   ======================================================================== */
+////////////////////////////////////////////////////////////////////////
+// INTENT PARSING: improved, bilingual, uses chrono + fuzzy + word-numbers
+function parseVoiceCommand(transcript) {
+  const raw = String(transcript || "").trim();
+  const lower = raw.toLowerCase();
+
+  // -----------------------------
+  // HELPERS
+  // -----------------------------
+  const wordToNum = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+  };
+
+  // -----------------------------
+  // 1) ADD EXPENSE — Strong Hindi/Hinglish patterns
+  // -----------------------------
+  const addHindi = lower.match(
+    /(rs|₹)?\s*(\d+)\s*(?:rs|rupay|rupaye)?\s*(?:ke|ki|mein|me|par|pe)?\s*(.+?)\s*(mein|me|par|pe)?\s*(add\s*karo|add\s*kar\s*do|jod\s*do|jodo|jod|kharch\s*kar\s*do)$/i
+  );
+  if (addHindi) {
+    const amount = parseInt(addHindi[2], 10);
+    const desc = addHindi[3].trim();
+    const catMatch = fuzzyCategory(desc);
+    return {
+      action: "add_expense",
+      data: {
+        amount,
+        description: desc,
+        category: catMatch.category,
+        confidence: 1 - (catMatch.score || 0),
+      },
+    };
+  }
+
+  // Generic English/Hinglish add
+  if (/^(add|spent|rs|₹|\d+)/i.test(lower)) {
+    const amount = parseAmountFromText(lower);
+    if (amount) {
+      let desc = lower
+        .replace(/(?:₹|rs\.?|rupees?)\s*\d+(?:[0-9,\.]*)/i, "")
+        .replace(/add|spent|for|on|jod|jodo|karo|kharch/gi, "")
+        .trim();
+      if (!desc) desc = "misc";
+      const catMatch = fuzzyCategory(desc);
+      return {
+        action: "add_expense",
+        data: {
+          amount,
+          description: desc,
+          category: catMatch.category,
+          confidence: 1 - (catMatch.score || 0),
+        },
+      };
+    }
+  }
+
+  // -----------------------------
+  // 2) LAST X EXPENSES
+  // -----------------------------
+  const lastMatch = lower.match(
+    /\b(last|pichhle|pichla)\s*(\d+)\s*(expense|expenses|kharche|transactions)\b/
+  );
+  if (lastMatch) {
+    return {
+      action: "last_expenses",
+      data: { limit: parseInt(lastMatch[2], 10) },
+    };
+  }
+
+  // last five expenses (word numbers)
+  const lastWordExp = lower.match(
+    /\blast\s+(one|two|three|four|five|six|seven|eight|nine|ten)\s+(expense|expenses|kharche|transactions)\b/
+  );
+  if (lastWordExp) {
+    return {
+      action: "last_expenses",
+      data: { limit: wordToNum[lastWordExp[1]] },
+    };
+  }
+
+  // -----------------------------
+  // 3) Aaj / Kal total kharcha
+  // -----------------------------
+  if (/aaj.*kitna.*(kharch|kharcha)/i.test(lower)) {
+    return {
+      action: "query_spending",
+      data: { category: "all", period: "today", which: "this" },
+    };
+  }
+  if (/kal.*kitna.*(kharch|kharcha)/i.test(lower)) {
+    return {
+      action: "query_spending",
+      data: { category: "all", period: "yesterday", which: "this" },
+    };
+  }
+
+  // -----------------------------
+  // 4) English short "How much on travel today"
+  // -----------------------------
+  const shortHowMuch = lower.match(
+    /how\s+much\s+(?:i\s+spend\s+)?(?:on|for)?\s*(.+?)\s+(today|yesterday|this|last)\s*(week|month|year)?/
+  );
+  if (shortHowMuch) {
+    return {
+      action: "query_spending",
+      data: {
+        category: shortHowMuch[1].trim(),
+        period: normPeriod(shortHowMuch[3] || shortHowMuch[2]),
+        which: normWhich(shortHowMuch[2]),
+      },
+    };
+  }
+
+  // -----------------------------
+  // 5) Hindi category queries:
+  //    "is mahine food par kitna kharcha"
+  // -----------------------------
+  const hiTimeQuery = lower.match(
+    /(is|ye|pichhle|pichla|last)\s+(mahine|mahina|month|week|hafta|hafte|year|saal)\s+(.+?)\s+(par|pe)\s+kitna/i
+  );
+  if (hiTimeQuery) {
+    const which = /(last|pichhle|pichla)/.test(hiTimeQuery[1])
+      ? "last"
+      : "this";
+    const period = normPeriod(hiTimeQuery[2]);
+    const category = hiTimeQuery[3].trim();
+    return {
+      action: "query_spending",
+      data: { category, period, which },
+    };
+  }
+
+  // -----------------------------
+  // 6) "How much on groceries last week"
+  // -----------------------------
+  const engCategoryQuery = lower.match(
+    /how\s+much\s+(?:did\s+i\s+spend\s+)?(?:on|for)\s+(.+?)\s+(this|last)\s+(week|month|year)\b/
+  );
+  if (engCategoryQuery) {
+    return {
+      action: "query_spending",
+      data: {
+        category: engCategoryQuery[1].trim(),
+        period: normPeriod(engCategoryQuery[3]),
+        which: normWhich(engCategoryQuery[2]),
+      },
+    };
+  }
+
+  // -----------------------------
+  // 7) Biggest expense (Hindi + English)
+  // -----------------------------
+  if (/highest\s+(expense|expenses)|sabse\s+bada\s+kharcha/i.test(lower)) {
+    const cw = chronoToPeriodWhich(lower) || { period: "month", which: "this" };
+    return {
+      action: "biggest_expense",
+      data: cw,
+    };
+  }
+
+  // -----------------------------
+  // 8) Lowest expense (English + Hindi)
+  // -----------------------------
+  if (/lowest\s+(expense|expenses)|sabse\s+chhota\s+kharcha/i.test(lower)) {
+    const cw = chronoToPeriodWhich(lower) || { period: "month", which: "this" };
+    return {
+      action: "lowest_expense",
+      data: cw,
+    };
+  }
+
+  // -----------------------------
+  // 9) Both extremes: biggest + smallest
+  // -----------------------------
+  if (
+    /(sabse\s+bada|biggest).*?(sabse\s+chhota|smallest)/i.test(lower) ||
+    /(sabse\s+chhota|smallest).*?(sabse\s+bada|biggest)/i.test(lower)
+  ) {
+    const cw = chronoToPeriodWhich(lower) || { period: "week", which: "this" };
+    return {
+      action: "both_extremes",
+      data: cw,
+    };
+  }
+
+  // -----------------------------
+  // 10) Savings / Budget progress
+  // -----------------------------
+  if (
+    /\bkitni\s+(saving|bachat)|maine\s+kitna\s+bacha|how\s+much\s+i\s+saved|how\s+far.*goal/i.test(
+      lower
+    )
+  ) {
+    return { action: "savings", data: { period: "month", which: "this" } };
+  }
+
+  // -----------------------------
+  // If everything fails
+  // -----------------------------
+  return { action: "unknown", data: {} };
+}
+
+
+////////////////////////////////////////////////////////////////////////
+// ROUTE: POST /api/voice/command
+router.post("/command", auth, async (req, res) => {
+  try {
+    const { transcript } = req.body;
+    if (!transcript || !String(transcript).trim()) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No transcript provided" });
+    }
+
+    const t = String(transcript).trim();
+    const lang = detectLanguage(t); // 'hi' | 'en'
+    const parsed = parseVoiceCommand(t);
+
+    switch (parsed.action) {
+      case "add_expense": {
+        const expense = await addExpenseFromVoice(req.user._id, parsed.data);
+        const msg =
+          lang === "hi"
+            ? `₹${fmt(expense.amount)} ${
+                expense.category
+              } ke liye jod diya gaya.`
+            : `Added ₹${fmt(expense.amount)} for ${expense.category}.`;
+        return res.json({
+          success: true,
+          action: "add_expense",
+          expense,
+          response: msg,
+          lang,
+        });
+      }
+
+      case "query_spending": {
+        const spendingData = await querySpending(req.user._id, parsed.data);
+        const msg = generateSpendingResponse(spendingData, lang);
+        return res.json({
+          success: true,
+          action: "query_spending",
+          data: spendingData,
+          response: msg,
+          lang,
+        });
+      }
+
+      case "get_summary": {
+        const summary = await getSummary(
+          req.user._id,
+          parsed.data?.period || "month",
+          parsed.data?.which || "this"
+        );
+        const msg = generateSummaryResponse(summary, lang);
+        return res.json({
+          success: true,
+          action: "get_summary",
+          data: summary,
+          response: msg,
+          lang,
+        });
+      }
+
+      case "biggest_expense": {
+        const bex = await getBiggestExpense(
+          req.user._id,
+          parsed.data.period,
+          parsed.data.which
+        );
+        const msg = bex
+          ? lang === "hi"
+            ? `${timePhraseHi(
+                parsed.data.period,
+                parsed.data.which
+              )} aapka sabse bada kharcha ₹${fmt(bex.amount)} ${
+                bex.category
+              } par hua${bex.description ? ` (${bex.description})` : ""}.`
+            : `Your biggest expense ${timePhraseEn(
+                parsed.data.period,
+                parsed.data.which
+              )} is ₹${fmt(bex.amount)} on ${bex.category}${
+                bex.description ? ` (${bex.description})` : ""
+              }.`
+          : lang === "hi"
+          ? `${timePhraseHi(
+              parsed.data.period,
+              parsed.data.which
+            )} koi kharcha nahi mila.`
+          : `No expenses found ${timePhraseEn(
+              parsed.data.period,
+              parsed.data.which
+            )}.`;
+        return res.json({
+          success: true,
+          action: "biggest_expense",
+          data: bex,
+          response: msg,
+          lang,
+        });
+      }
+
+      case "top_categories": {
+        const tc = await getTopCategories(
+          req.user._id,
+          parsed.data.period,
+          parsed.data.which,
+          parsed.data.limit || 3
+        );
+        const msg = tc.length
+          ? lang === "hi"
+            ? `${timePhraseHi(parsed.data.period, parsed.data.which)} top ${
+                tc.length
+              } categories: ` +
+              tc
+                .map(([cat, amt], i) => `${i + 1}. ${cat} ₹${fmt(amt)}`)
+                .join(", ") +
+              "."
+            : `Top ${tc.length} categories ${timePhraseEn(
+                parsed.data.period,
+                parsed.data.which
+              )}: ` +
+              tc
+                .map(([cat, amt], i) => `${i + 1}. ${cat} ₹${fmt(amt)}`)
+                .join(", ") +
+              "."
+          : lang === "hi"
+          ? `${timePhraseHi(
+              parsed.data.period,
+              parsed.data.which
+            )} koi spending nahi mili.`
+          : `No spending found ${timePhraseEn(
+              parsed.data.period,
+              parsed.data.which
+            )}.`;
+        return res.json({
+          success: true,
+          action: "top_categories",
+          data: tc,
+          response: msg,
+          lang,
+        });
+      }
+
+      case "savings": {
+        const sv = await getSavings(
+          req.user._id,
+          parsed.data.period,
+          parsed.data.which
+        );
+        const msg = sv
+          ? generateSavingsResponse(sv, lang)
+          : lang === "hi"
+          ? `Aapki income/budget settings nahi mili. Kripya monthly income set karein.`
+          : `I couldn't find your income/budget settings. Please set your monthly income.`;
+        return res.json({
+          success: true,
+          action: "savings",
+          data: sv,
+          response: msg,
+          lang,
+        });
+      }
+
+      case "last_expenses": {
+        const list = await getRecentExpenses(
+          req.user._id,
+          parsed.data.limit || 5
+        );
+        const msg = list.length
+          ? lang === "hi"
+            ? `Aakhri ${list.length} kharche: ` +
+              list
+                .map(
+                  (e) =>
+                    `₹${fmt(e.amount)} ${e.category} (${shortDate(e.date)})`
+                )
+                .join(", ") +
+              "."
+            : `Last ${list.length} expenses: ` +
+              list
+                .map(
+                  (e) =>
+                    `₹${fmt(e.amount)} ${e.category} (${shortDate(e.date)})`
+                )
+                .join(", ") +
+              "."
+          : lang === "hi"
+          ? `Koi recent expense nahi mila.`
+          : `No recent expenses found.`;
+        return res.json({
+          success: true,
+          action: "last_expenses",
+          data: list,
+          response: msg,
+          lang,
+        });
+      }
+
+      case "compare_periods": {
+        const cmp = await comparePeriods(
+          req.user._id,
+          parsed.data.base,
+          parsed.data.vs
+        );
+        const msg = generateCompareResponse(cmp, lang);
+        return res.json({
+          success: true,
+          action: "compare_periods",
+          data: cmp,
+          response: msg,
+          lang,
+        });
+      }
+
+      case "avg_spending": {
+        const avg = await getAverageSpending(
+          req.user._id,
+          parsed.data.period || "month"
+        );
+        const msg =
+          lang === "hi"
+            ? `${periodHi(parsed.data.period)} ka aapka ausat kharcha ₹${fmt(
+                avg.average
+              )} hai.`
+            : `Your average ${parsed.data.period} spending is ₹${fmt(
+                avg.average
+              )}.`;
+        return res.json({
+          success: true,
+          action: "avg_spending",
+          data: avg,
+          response: msg,
+          lang,
+        });
+      }
+
+      default: {
+        const msg =
+          lang === "hi"
+            ? `Mujhe sahi samajh nahi aaya. Aise bolein:
+- "200 rupay khane mein add karo"
+- "Aaj maine kitna kharch kiya?"
+- "Kal ka kharcha kitna tha?"
+- "Is mahine ka sabse bada kharcha kya hai?"
+- "Is hafte top 3 categories batao"
+- "Is mahine kitni savings hui?"
+- "Pichhle 5 expenses dikhao"`
+            : `I didn't catch that. Try:
+- "Add 200 rupees for food"
+- "How much did I spend today?"
+- "How much yesterday?"
+- "What's my biggest expense this month?"
+- "Top 3 categories this week"
+- "How much did I save this month?"
+- "Show my last 5 expenses"`;
+        return res.json({ success: false, message: msg, lang });
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+////////////////////////////////////////////////////////////////////////
+// CORE DB OPS (unchanged logic, integrated)
 async function addExpenseFromVoice(userId, data) {
   const { amount, description } = data;
-  const category = categorizationService.categorize(description, amount);
-  const tags = categorizationService.suggestTags(description);
+  const category =
+    data.category || categorizationService.categorize(description, amount);
+  const tags = categorizationService.suggestTags
+    ? categorizationService.suggestTags(description)
+    : [];
 
   const expense = new Expense({
     user: userId,
@@ -564,18 +878,15 @@ async function querySpending(userId, data) {
   const { category, period = "month", which = "this" } = data;
   const { start, end } = getPeriodRange(period, which);
 
-  // 👇 If user did NOT mention any category → search ALL
   let rawCategory = (category || "").trim().toLowerCase();
   let useAllCategories = !rawCategory || rawCategory === "all";
 
-  const query = {
-    user: userId,
-    date: { $gte: start, $lte: end },
-  };
+  const query = { user: userId, date: { $gte: start, $lte: end } };
 
-  // ✅ Only apply category if user clearly said something like "food", "travel", "shopping"
   if (!useAllCategories) {
-    const mapped = categorizationService.categorize(rawCategory);
+    const mapped = categorizationService.categorize
+      ? categorizationService.categorize(rawCategory)
+      : rawCategory;
     if (mapped && mapped !== "other") {
       query.category = mapped;
     }
@@ -600,7 +911,6 @@ async function getSummary(userId, period = "month", which = "this") {
     user: userId,
     date: { $gte: start, $lte: end },
   });
-
   const total = expenses.reduce((s, e) => s + e.amount, 0);
 
   const byCategory = {};
@@ -676,7 +986,6 @@ async function getSavings(userId, period = "month", which = "this") {
 
   const baseline = monthlyIncome || monthlyBudget;
 
-  // Simple proration from monthly baseline
   const now = new Date();
   const daysInMonth = new Date(
     now.getFullYear(),
@@ -789,9 +1098,8 @@ async function getAverageSpending(userId, period = "month") {
   return { period, average: total || 0 };
 }
 
-/* ========================================================================
-   RESPONSE BUILDERS (Bilingual)
-   ======================================================================== */
+////////////////////////////////////////////////////////////////////////
+// RESPONSE BUILDERS (Bilingual)
 function generateSpendingResponse(data, lang = "en") {
   const { category, period, which, total, count } = data;
   const readableCat =
@@ -800,23 +1108,23 @@ function generateSpendingResponse(data, lang = "en") {
   if (count === 0) {
     return lang === "hi"
       ? `${timePhraseHi(
-        period,
-        which
-      )} ${readableCat} par koi kharcha nahi mila.`
+          period,
+          which
+        )} ${readableCat} par koi kharcha nahi mila.`
       : `You haven't spent anything on ${readableCat} ${timePhraseEn(
-        period,
-        which
-      )}.`;
+          period,
+          which
+        )}.`;
   }
 
   return lang === "hi"
     ? `${timePhraseHi(period, which)} aapne ${readableCat} par ₹${fmt(
-      total
-    )} kharch kiye, kul ${count} transaction${count > 1 ? "s" : ""}.`
+        total
+      )} kharch kiye, kul ${count} transaction${count > 1 ? "s" : ""}.`
     : `You spent ₹${fmt(total)} on ${readableCat} ${timePhraseEn(
-      period,
-      which
-    )} across ${count} transaction${count > 1 ? "s" : ""}.`;
+        period,
+        which
+      )} across ${count} transaction${count > 1 ? "s" : ""}.`;
 }
 
 function generateSummaryResponse(summary, lang = "en") {
@@ -851,11 +1159,12 @@ function generateSavingsResponse(sv, lang = "en") {
     )}.)`;
   }
 
-  return `${cap(timePhraseEn(sv.period, sv.which))}, you ${signSaved ? "saved" : "overspent by"
-    } ₹${fmt(Math.abs(sv.savings))}.
+  return `${cap(timePhraseEn(sv.period, sv.which))}, you ${
+    signSaved ? "saved" : "overspent by"
+  } ₹${fmt(Math.abs(sv.savings))}.
 (Baseline ${sv.baselineType}: ₹${fmt(sv.effectiveIncome)}, Expenses: ₹${fmt(
-      sv.totalExpenses
-    )}.)`;
+    sv.totalExpenses
+  )}.)`;
 }
 
 function generateCompareResponse(cmp, lang = "en") {
@@ -882,11 +1191,6 @@ function generateCompareResponse(cmp, lang = "en") {
   )}). Difference: ₹${fmt(Math.abs(diff))}${pctStr}`;
 }
 
-function cap(s) {
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-}
-
-/* ========================================================================
-   FINAL EXPORT
-   ======================================================================== */
+////////////////////////////////////////////////////////////////////////
+// final export
 module.exports = router;
