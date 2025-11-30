@@ -55,7 +55,7 @@ const Register = () => {
     <div className="relative flex min-h-screen w-full flex-col items-center justify-center p-4 sm:p-6 lg:p-8 font-display bg-background-light dark:bg-background-dark">
       <header className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 lg:px-10 lg:py-8">
         <img 
-          src={isDark ? "/PocketPilot-Logo-dark.png" : "/PocketPilot-Logo.png"}
+          src={isDark ? "/logo-dark.png" : "/logo-bright.png"}
           alt="PocketPilot - Your Smart Financial Co-Pilot" 
           className="h-40 w-auto"
         />
