@@ -149,12 +149,6 @@ const Expenses = () => {
           Expenses
         </p>
         <div className="flex items-center gap-2">
-          <button
-            className="flex h-10 items-center justify-center rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#111318] p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-            onClick={() => alert("Voice input feature coming soon!")}
-          >
-            <span className="material-symbols-outlined text-xl">mic</span>
-          </button>
           <label className="flex h-10 items-center justify-center rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#111318] p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
                 <span className="material-symbols-outlined text-xl">
                   qr_code_scanner
